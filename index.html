@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Photo Series</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    background: #ffffff;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: 6vh;
+    padding-bottom: 190px; /* reserve space so fixed bottom controls never overlap the stage */
+    gap: 14px;
+    overflow: hidden;
+  }
+
+  #dropzone {
+    width: 90%;
+    max-width: 480px;
+    padding: 20px 24px;
+    border: 1px dashed #ccc;
+    border-radius: 8px;
+    text-align: center;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 12.5px;
+    color: #999;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+    flex-shrink: 0;
+  }
+
+  #dropzone:hover {
+    border-color: #999;
+  }
+
+  #dropzone.dragover {
+    border-color: #111;
+    background: #fafafa;
+    color: #555;
+  }
+
+  .dropzone-hint {
+    display: block;
+    margin-top: 4px;
+    font-size: 11px;
+    color: #bbb;
+  }
+
+  #thumbstrip {
+    width: 90%;
+    max-width: 640px;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 4px 2px;
+    flex-shrink: 0;
+  }
+
+  .thumb {
+    position: relative;
+    flex: 0 0 auto;
+    width: 46px;
+    height: 74px;
+    border-radius: 4px;
+    overflow: hidden;
+    cursor: grab;
+    border: 1px solid #e5e5e5;
+    transition: transform 0.12s ease, border-color 0.12s ease;
+  }
+
+  .thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    pointer-events: none;
+    -webkit-user-drag: none;
+  }
+
+  .thumb-num {
+    position: absolute;
+    bottom: 2px;
+    right: 3px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 9px;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.55);
+    padding: 0px 4px;
+    border-radius: 3px;
+    line-height: 1.4;
+  }
+
+  .thumb.dragging {
+    opacity: 0.35;
+  }
+
+  .thumb.drag-over {
+    border-color: #111;
+    transform: scale(1.06);
+  }
+
+  #stage {
+    position: relative;
+    height: 60vh;
+    overflow: hidden;
+    background: #ffffff;
+    border: 1px solid #000000;
+    flex-shrink: 0;
+  }
+
+  #viewport-inner {
+    position: absolute;
+    overflow: hidden;
+  }
+
+  #track {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    will-change: transform;
+  }
+
+  .frame {
+    flex: 0 0 auto;
+    overflow: hidden;
+    background: #f2f2f2;
+    cursor: grab;
+    transition: transform 0.12s ease-out;
+  }
+
+  .frame.drag-source {
+    background: #ffffff;
+  }
+
+  .frame.drag-source img {
+    visibility: hidden;
+  }
+
+  .drag-ghost {
+    position: fixed;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    z-index: 50;
+    overflow: hidden;
+    border-radius: 2px;
+    opacity: 0.92;
+  }
+
+  .drag-ghost img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .frame img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    -webkit-user-drag: none;
+    user-select: none;
+    pointer-events: none;
+  }
+
+  .handle {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    width: 16px;
+    cursor: ew-resize;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: none;
+  }
+
+  .handle.left { left: 0; }
+  .handle.right { right: 0; }
+
+  .handle::before {
+    content: "";
+    width: 3px;
+    height: 36px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.85);
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.15);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+
+  .handle:hover::before,
+  .handle.dragging::before {
+    opacity: 1;
+  }
+
+  #readout {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    color: #999;
+    text-transform: uppercase;
+    user-select: none;
+  }
+
+  #controls {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #ffffff;
+    border-top: 1px solid #e5e5e5;
+    padding: 16px 24px 20px;
+    display: flex;
+    justify-content: center;
+    gap: 56px;
+    flex-wrap: wrap;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    z-index: 10;
+  }
+
+  .control-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 220px;
+  }
+
+  .control-section h3 {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #999;
+    margin-bottom: 2px;
+  }
+
+  .control-section label {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .control-label {
+    font-size: 12px;
+    color: #333;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .control-value {
+    color: #999;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .control-hint {
+    font-size: 10.5px;
+    color: #bbb;
+  }
+
+  input[type="range"] {
+    width: 100%;
+    accent-color: #111111;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #track { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div id="dropzone">
+  <input type="file" id="fileInput" accept="image/*" multiple hidden>
+  <p id="dropzoneText">Drop images here, or click to browse<br><span class="dropzone-hint">Displayed in filename order</span></p>
+</div>
+
+<div id="thumbstrip"></div>
+
+<div id="stage">
+  <div id="viewport-inner">
+    <div id="track"></div>
+  </div>
+  <div class="handle left" data-side="left"></div>
+  <div class="handle right" data-side="right"></div>
+</div>
+<div id="readout"></div>
+
+<div id="controls">
+  <div class="control-section">
+    <h3>Motion</h3>
+    <label>
+      <span class="control-label">Friction <span class="control-value" id="frictionVal"></span></span>
+      <input type="range" id="frictionSlider" min="0.85" max="0.97" step="0.005">
+      <span class="control-hint">Lower stops sooner &middot; higher glides longer</span>
+    </label>
+    <label>
+      <span class="control-label">Max velocity <span class="control-value" id="velocityVal"></span></span>
+      <input type="range" id="velocitySlider" min="20" max="100" step="1">
+      <span class="control-hint">Speed ceiling for fast scrolling</span>
+    </label>
+  </div>
+  <div class="control-section">
+    <h3>Geometry</h3>
+    <label>
+      <span class="control-label">Images at 16:9 <span class="control-value" id="imagesVal"></span></span>
+      <input type="range" id="imagesSlider" min="3" max="5" step="0.1">
+      <span class="control-hint">Narrows to 1 image at 9:16</span>
+    </label>
+    <label>
+      <span class="control-label">Top/bottom margin <span class="control-value" id="marginVal"></span></span>
+      <input type="range" id="marginSlider" min="0" max="200" step="5">
+      <span class="control-hint">Added on top of the base margin</span>
+    </label>
+  </div>
+</div>
+
+<script>
+  /* Images live as separate files in /images, referenced by relative path. */
+  let imagesData = [
+    { src: "images/photo-01.jpg", aspect: 833/1600 },
+    { src: "images/photo-02.jpg", aspect: 833/1600 },
+    { src: "images/photo-03.jpg", aspect: 833/1600 },
+    { src: "images/photo-04.jpg", aspect: 833/1600 },
+    { src: "images/photo-05.jpg", aspect: 833/1600 },
+    { src: "images/photo-06.jpg", aspect: 833/1600 },
+    { src: "images/photo-07.jpg", aspect: 833/1600 },
+    { src: "images/photo-08.jpg", aspect: 833/1600 },
+    { src: "images/photo-09.jpg", aspect: 833/1600 },
+    { src: "images/photo-10.jpg", aspect: 833/1600 },
+  ];
+
+  let maxVisible = 4;     // at widest, 16:9 - controlled by slider
+  const MIN_VISIBLE = 1;   // at narrowest, 9:16
+  const COPIES = 3;        // duplicated sets for seamless looping
+  const MARGIN_RATIO = 0.045; // base margin as a fraction of stage height
+  const MIN_MARGIN = 16;      // px floor so margins stay visible on short windows
+  let marginBoostPercent = 0; // % added on top of the base margin - controlled by slider
+
+  const stage = document.getElementById("stage");
+  const viewportInner = document.getElementById("viewport-inner");
+  const track = document.getElementById("track");
+  const readout = document.getElementById("readout");
+  const leftHandle = document.querySelector(".handle.left");
+  const rightHandle = document.querySelector(".handle.right");
+
+  let stageHeight = 0;
+  let minWidth = 0;
+  let maxWidth = 0;
+  let currentWidth = 0;
+  let margin = 0;
+
+  let visible = maxVisible;
+  let frameWidths = [];   // rendered width of each image, in imagesData order (aspect-locked)
+  let centers = [];       // cumulative center position of each image within one set
+  let singleSetWidth = 0;
+  let innerWidthCurrent = 0; // available width inside the side margins, used by snapping
+  let currentGap = 0;        // current spacing between images
+  let sideMargin = 0;
+  let pos = 0;
+  let velocity = 0;      // current speed, px per frame - builds and decays like momentum
+  let ticking = false;
+  let isSnapMode = false;
+  let snapping = false;  // true while gliding into a snapped center (9:16 only)
+  let reordering = false; // true while a click-and-drag reorder is in progress - freezes motion
+  let snapTarget = 0;
+  let wheelIdleTimer = null;
+  const SNAP_IDLE_DELAY = 140;  // ms of no wheel input before snapping
+  const SNAP_EASE = 0.14;       // easing used while gliding into a snapped position
+  const MAX_WHEEL_DELTA = 160;  // clamp so one wheel/trackpad event can't inject a runaway jump
+  let friction = 0.92;          // per-frame velocity decay - controlled by slider
+  let maxVelocity = 55;         // px/frame speed ceiling - controlled by slider
+  const VELOCITY_STOP = 0.05;   // velocity below this is treated as stopped
+
+  function buildTrack() {
+    track.innerHTML = "";
+    for (let c = 0; c < COPIES; c++) {
+      imagesData.forEach((d, idx) => {
+        const div = document.createElement("div");
+        div.className = "frame";
+        div.dataset.idx = idx;
+        const img = document.createElement("img");
+        img.src = d.src;
+        img.draggable = false;
+        img.alt = "";
+        div.appendChild(img);
+        div.addEventListener("pointerdown", (e) => startReorderDrag(e, div));
+        track.appendChild(div);
+      });
+    }
+  }
+
+  function computeBounds() {
+    stageHeight = stage.getBoundingClientRect().height;
+    maxWidth = stageHeight * (16 / 9);
+    minWidth = stageHeight * (9 / 16);
+    const pageMax = window.innerWidth * 0.96;
+    maxWidth = Math.min(maxWidth, pageMax);
+    minWidth = Math.min(minWidth, maxWidth); // never let min exceed the clamped max
+    if (!currentWidth) currentWidth = maxWidth;
+    currentWidth = Math.min(Math.max(currentWidth, minWidth), maxWidth);
+    const baseMargin = Math.max(stageHeight * MARGIN_RATIO, MIN_MARGIN);
+    margin = baseMargin * (1 + marginBoostPercent / 100);
+  }
+
+  function applyWidth(px) {
+    currentWidth = Math.min(Math.max(px, minWidth), maxWidth);
+    stage.style.width = currentWidth + "px";
+
+    const range = maxWidth - minWidth;
+    const t = range > 0 ? (maxWidth - currentWidth) / range : 0;
+    visible = maxVisible - (maxVisible - MIN_VISIBLE) * t;
+    isSnapMode = Math.abs(visible - MIN_VISIBLE) < 0.01; // true only at 9:16 (one image on screen)
+    if (!isSnapMode) snapping = false;
+
+    // side margin interpolates from 0 at 16:9 (edgeless loop) up to the
+    // full margin value at 9:16, where it matches the constant top/bottom
+    // margin -> at 1 visible image the frame ends up with equal margins
+    // on all four sides, same as before.
+    sideMargin = margin * t;
+
+    viewportInner.style.top = margin + "px";
+    viewportInner.style.bottom = margin + "px";
+    viewportInner.style.left = sideMargin + "px";
+    viewportInner.style.right = sideMargin + "px";
+
+    const innerWidth = currentWidth - sideMargin * 2;
+    const frameHeightFull = stageHeight - margin * 2; // fixed display height, unless scaled down below
+    const n = imagesData.length;
+
+    const aspectsAvg = imagesData.reduce((a, d) => a + d.aspect, 0) / n;
+    const avgWidthFull = frameHeightFull * aspectsAvg;
+
+    // Try to hit the requested visible count purely by adjusting the gap,
+    // keeping every image at full height. If that would need a *negative*
+    // gap (the images are too wide/tall relative to the window to fit that
+    // many at full size), scale every frame down uniformly instead - this
+    // keeps aspect ratio perfectly intact, it just displays smaller, letting
+    // the requested count actually fit rather than silently capping out.
+    let gap, frameHeight;
+    if (visible > 1.001) {
+      const idealGap = (innerWidth - visible * avgWidthFull) / (visible - 1);
+      if (idealGap >= 0) {
+        gap = idealGap;
+        frameHeight = frameHeightFull;
+      } else {
+        gap = 0;
+        const requiredWidth = visible * avgWidthFull;
+        const scale = innerWidth / requiredWidth;
+        frameHeight = frameHeightFull * scale;
+      }
+    } else {
+      gap = margin; // 9:16 fallback: only one image on screen, so count isn't in play
+      frameHeight = frameHeightFull;
+    }
+
+    frameWidths = imagesData.map((d) => frameHeight * d.aspect);
+
+    track.style.gap = gap + "px";
+    currentGap = gap;
+    innerWidthCurrent = innerWidth;
+
+    track.querySelectorAll(".frame").forEach((f) => {
+      const idx = parseInt(f.dataset.idx, 10);
+      f.style.width = frameWidths[idx] + "px";
+      f.style.height = frameHeight + "px";
+    });
+
+    // cumulative center of each image within one set, for looping + snapping
+    centers = [];
+    let x = 0;
+    frameWidths.forEach((w) => {
+      centers.push(x + w / 2);
+      x += w + gap;
+    });
+    singleSetWidth = x;
+
+    render();
+    updateReadout();
+  }
+
+  function updateReadout() {
+    const ratio = (currentWidth / stageHeight).toFixed(2);
+    readout.textContent = `${ratio}:1  ·  ${visible.toFixed(1)} images visible  ·  ${Math.round(margin)}px top/bottom  ·  ${Math.round(sideMargin)}px sides`;
+  }
+
+  function render() {
+    if (singleSetWidth <= 0) return;
+    const wrapped = ((pos % singleSetWidth) + singleSetWidth) % singleSetWidth;
+    const x = -(wrapped + singleSetWidth);
+    track.style.transform = `translate3d(${x}px, 0, 0)`;
+  }
+
+  function tick() {
+    if (reordering) {
+      velocity = 0;
+      // don't render or reschedule - position stays exactly where it was
+      // the moment the drag started, so frames don't drift under the cursor
+      ticking = false;
+      return;
+    }
+
+    if (snapping) {
+      pos += (snapTarget - pos) * SNAP_EASE;
+      velocity = 0;
+      if (Math.abs(snapTarget - pos) < 0.05) {
+        pos = snapTarget;
+        snapping = false;
+      }
+    } else {
+      pos += velocity;
+      velocity *= friction;
+      if (Math.abs(velocity) < VELOCITY_STOP) velocity = 0;
+    }
+
+    rebase();
+    render();
+
+    if (snapping || Math.abs(velocity) > 0) {
+      requestAnimationFrame(tick);
+    } else {
+      ticking = false;
+    }
+  }
+
+  function rebase() {
+    // keep pos (and snapTarget, if active) from drifting to large magnitudes
+    // over a long session. Shifting both by the same amount changes neither
+    // the rendered position nor the remaining distance between them.
+    if (singleSetWidth <= 0) return;
+    if (Math.abs(pos) > singleSetWidth * 4) {
+      const shift = Math.floor(pos / singleSetWidth) * singleSetWidth;
+      pos -= shift;
+      if (snapping) snapTarget -= shift;
+    }
+  }
+
+  function requestTick() {
+    if (!ticking) {
+      ticking = true;
+      requestAnimationFrame(tick);
+    }
+  }
+
+  function startSnap() {
+    if (!centers.length || singleSetWidth <= 0) return;
+    const halfViewport = innerWidthCurrent / 2;
+    let best = pos;
+    let bestDist = Infinity;
+    centers.forEach((c) => {
+      const base = c - halfViewport; // pos value that would center this image
+      const k = Math.round((pos - base) / singleSetWidth);
+      const candidate = base + k * singleSetWidth; // nearest occurrence of that center to current pos
+      const dist = Math.abs(pos - candidate);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = candidate;
+      }
+    });
+    snapTarget = best;
+    snapping = true;
+    requestTick();
+  }
+
+  stage.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    if (reordering) return;
+
+    let delta = Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+    delta = Math.max(-MAX_WHEEL_DELTA, Math.min(MAX_WHEEL_DELTA, delta));
+
+    // accumulate rather than replace: sustained scrolling in one direction
+    // keeps adding to velocity (acceleration), capped at MAX_VELOCITY; once
+    // input stops, friction alone brings it back down (deceleration/coast).
+    velocity += delta * 0.55;
+    velocity = Math.max(-maxVelocity, Math.min(maxVelocity, velocity));
+    snapping = false; // new input always breaks out of an in-progress snap
+    requestTick();
+
+    clearTimeout(wheelIdleTimer);
+    if (isSnapMode) {
+      wheelIdleTimer = setTimeout(startSnap, SNAP_IDLE_DELAY);
+    }
+  }, { passive: false });
+
+  let dragSide = null;
+  let dragStartX = 0;
+  let dragStartWidth = 0;
+
+  function startDrag(e, side) {
+    dragSide = side;
+    dragStartX = e.clientX;
+    dragStartWidth = currentWidth;
+    (side === "left" ? leftHandle : rightHandle).classList.add("dragging");
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", onDrag);
+    window.addEventListener("pointerup", endDrag);
+  }
+
+  function onDrag(e) {
+    if (!dragSide) return;
+    const delta = e.clientX - dragStartX;
+    const widthDelta = dragSide === "right" ? delta * 2 : -delta * 2;
+    applyWidth(dragStartWidth + widthDelta);
+  }
+
+  function endDrag() {
+    dragSide = null;
+    leftHandle.classList.remove("dragging");
+    rightHandle.classList.remove("dragging");
+    document.body.style.userSelect = "";
+    window.removeEventListener("pointermove", onDrag);
+    window.removeEventListener("pointerup", endDrag);
+  }
+
+  leftHandle.addEventListener("pointerdown", (e) => startDrag(e, "left"));
+  rightHandle.addEventListener("pointerdown", (e) => startDrag(e, "right"));
+
+  // --- in-stage click-and-drag reordering ---
+  const REORDER_THRESHOLD = 5; // px of movement before a click becomes a drag
+  let reorderSourceIdx = null;
+  let reorderStartX = 0;
+  let reorderStartY = 0;
+  let reorderActive = false;
+  let reorderGhost = null;
+  let reorderTargetEl = null; // whichever adjacent neighbor is currently being evaluated/shrunk
+  let blockedIdx = null; // the index we most recently vacated - blocked from swapping back into until overlap actually drops away
+  const SWAP_TRIGGER = 0.2;  // overlap fraction needed to commit a swap
+  const SWAP_DISARM = 0.05;  // overlap must drop below this against a blocked neighbor before it can trigger again
+
+  let lastPointerX = 0;
+  let lastPointerY = 0;
+  let edgeScrollDir = 0;      // -1 (toward start), 0 (none), or 1 (toward end)
+  let edgeScrollSpeed = 0;    // px per frame, scales with proximity to the edge
+  let edgeScrollRunning = false;
+  const EDGE_ZONE = 70;       // px from the stage edge that triggers auto-scroll
+  const EDGE_MAX_SPEED = 16;  // px/frame once the cursor is right at the edge
+
+  function startReorderDrag(e, frameEl) {
+    if (e.button !== undefined && e.button !== 0) return; // left click / primary touch only
+
+    // if a previous drag never reached its own cleanup (its pointerup was
+    // missed for any reason), starting a new drag would otherwise overwrite
+    // reorderGhost and strand the old ghost element in the DOM forever with
+    // nothing left able to remove it. Always clear the slate first.
+    forceCancelReorderDrag();
+
+    reorderSourceIdx = parseInt(frameEl.dataset.idx, 10);
+    reorderStartX = e.clientX;
+    reorderStartY = e.clientY;
+    reorderActive = false;
+    reorderTargetEl = null;
+    blockedIdx = null;
+
+    const rect = frameEl.getBoundingClientRect();
+    reorderGhost = { rect, sourceEl: frameEl };
+
+    window.addEventListener("pointermove", onReorderMove);
+    window.addEventListener("pointerup", endReorderDrag);
+    window.addEventListener("pointercancel", endReorderDrag);
+  }
+
+  function createGhost(frameEl, rect) {
+    const ghost = document.createElement("div");
+    ghost.className = "drag-ghost";
+    ghost.style.width = rect.width + "px";
+    ghost.style.height = rect.height + "px";
+    ghost.style.transform = `translate(${rect.left}px, ${rect.top}px)`;
+    const img = frameEl.querySelector("img");
+    const ghostImg = document.createElement("img");
+    ghostImg.src = img.src;
+    ghost.appendChild(ghostImg);
+    document.body.appendChild(ghost);
+    return ghost;
+  }
+
+  function onReorderMove(e) {
+    if (reorderSourceIdx === null) return;
+    lastPointerX = e.clientX;
+    lastPointerY = e.clientY;
+    const dx = e.clientX - reorderStartX;
+    const dy = e.clientY - reorderStartY;
+
+    if (!reorderActive) {
+      if (Math.abs(dx) < REORDER_THRESHOLD && Math.abs(dy) < REORDER_THRESHOLD) return;
+      // movement threshold cleared - actually start the drag now
+      reorderActive = true;
+      reordering = true;
+      velocity = 0;
+      snapping = false;
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "grabbing";
+      reorderGhost.el = createGhost(reorderGhost.sourceEl, reorderGhost.rect);
+      markAllSourceCopies(reorderSourceIdx);
+    }
+
+    reorderGhost.el.style.transform =
+      `translate(${reorderGhost.rect.left + dx}px, ${reorderGhost.rect.top + dy}px)`;
+
+    updateEdgeScroll(e.clientX);
+    updateDragTarget(e.clientX, e.clientY);
+  }
+
+  // Finds whichever on-screen copy of a given image index sits nearest a
+  // given x position - needed because each image is duplicated 3x for the
+  // seamless loop, so a data-idx alone doesn't uniquely identify a frame.
+  // Every image is duplicated 3x in the DOM for the seamless loop, so if a
+  // drag travels far enough (via edge auto-scroll), the *same* dragged image
+  // can scroll into view again from one of the other copies. These blank out
+  // every on-screen instance sharing the given index, not just the nearest one.
+  function markAllSourceCopies(idx) {
+    if (idx === null) return;
+    track.querySelectorAll(`.frame[data-idx="${idx}"]`).forEach((f) => f.classList.add("drag-source"));
+  }
+
+  function unmarkAllSourceCopies(idx) {
+    if (idx === null) return;
+    track.querySelectorAll(`.frame[data-idx="${idx}"]`).forEach((f) => f.classList.remove("drag-source"));
+  }
+
+  function findNearestFrameByIdx(idx, clientX) {
+    const matches = track.querySelectorAll(`.frame[data-idx="${idx}"]`);
+    let best = null;
+    let bestDist = Infinity;
+    matches.forEach((f) => {
+      const r = f.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const dist = Math.abs(clientX - cx);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = f;
+      }
+    });
+    return best;
+  }
+
+  // Evaluates only the single neighbor immediately adjacent to the dragged
+  // image's *current* slot, in whichever direction the ghost is on. Once the
+  // ghost covers 20% of that neighbor's width, the neighbor is swapped into
+  // the blank slot immediately (live, mid-drag) and the blank slot advances
+  // one step further - so sweeping across many images chains this one step
+  // at a time, correctly shifting everything in between rather than jumping
+  // straight to a single deferred swap decided at drop.
+  function updateDragTarget(clientX, clientY) {
+    if (!reorderGhost || !reorderGhost.el || !reorderGhost.sourceEl) return;
+
+    if (reorderTargetEl) {
+      reorderTargetEl.style.transform = "";
+      reorderTargetEl = null;
+    }
+
+    const ghostRect = reorderGhost.el.getBoundingClientRect();
+    const sourceRect = reorderGhost.sourceEl.getBoundingClientRect();
+    const ghostCenter = ghostRect.left + ghostRect.width / 2;
+    const sourceCenter = sourceRect.left + sourceRect.width / 2;
+
+    const dir = ghostCenter > sourceCenter ? 1 : (ghostCenter < sourceCenter ? -1 : 0);
+    if (dir === 0) return;
+
+    const neighborEl = dir > 0
+      ? reorderGhost.sourceEl.nextElementSibling
+      : reorderGhost.sourceEl.previousElementSibling;
+    if (!neighborEl || !neighborEl.classList || !neighborEl.classList.contains("frame")) return;
+
+    const neighborIdx = parseInt(neighborEl.dataset.idx, 10);
+    if (neighborIdx === reorderSourceIdx) return;
+
+    reorderTargetEl = neighborEl;
+    const r = neighborEl.getBoundingClientRect();
+    const neighborCenter = r.left + r.width / 2;
+
+    // gap = distance from the ghost's leading edge to the neighbor's near edge
+    const gap = dir > 0
+      ? r.left - ghostRect.right
+      : ghostRect.left - r.right;
+
+    const falloff = r.width; // shrink begins within one frame-width of touching
+    const t = Math.min(Math.max(1 - gap / falloff, 0), 1);
+    const scale = 1 - 0.2 * t; // 1.0 down to 0.8 as edges meet
+
+    const overlapWidth = Math.max(
+      0,
+      Math.min(ghostRect.right, r.right) - Math.max(ghostRect.left, r.left)
+    );
+    const overlapFraction = overlapWidth / r.width;
+
+    // if this neighbor is the slot we just vacated, it's blocked from
+    // re-triggering a swap until overlap genuinely drops away first - this
+    // requires the cursor to actually move away before it can swap back,
+    // rather than bouncing forward and backward in place indefinitely.
+    if (neighborIdx === blockedIdx) {
+      if (overlapFraction < SWAP_DISARM) blockedIdx = null;
+      neighborEl.style.transform = `scale(${scale})`;
+      return;
+    }
+
+    if (overlapFraction >= SWAP_TRIGGER) {
+      // commit this one step live: the neighbor and the dragged image swap
+      // slots (they're always adjacent, so this is a plain pair swap - no
+      // splice-index bookkeeping needed), then rebuild so everything lands
+      // in its correct final geometry automatically.
+      const a = reorderSourceIdx;
+      const b = neighborIdx;
+      [imagesData[a], imagesData[b]] = [imagesData[b], imagesData[a]];
+      blockedIdx = a; // don't allow swapping straight back into the slot we just left
+      reorderSourceIdx = b;
+      reorderTargetEl = null;
+
+      renderThumbnails();
+      buildTrack();
+      layout();
+
+      const newSourceEl = findNearestFrameByIdx(reorderSourceIdx, ghostCenter);
+      markAllSourceCopies(reorderSourceIdx);
+      if (newSourceEl) {
+        reorderGhost.sourceEl = newSourceEl;
+      }
+    } else {
+      neighborEl.style.transform = `scale(${scale})`;
+    }
+  }
+
+  // Checks how close the cursor is to either edge of the display window and
+  // sets the auto-scroll direction/speed accordingly. Starts the edge-scroll
+  // loop the first time it's needed; the loop itself watches this state and
+  // stops on its own once the cursor moves away from the edge (or the drag ends).
+  function updateEdgeScroll(clientX) {
+    const stageRect = stage.getBoundingClientRect();
+    const distFromLeft = clientX - stageRect.left;
+    const distFromRight = stageRect.right - clientX;
+
+    if (distFromLeft < EDGE_ZONE) {
+      edgeScrollDir = -1;
+      edgeScrollSpeed = EDGE_MAX_SPEED * (1 - Math.max(distFromLeft, 0) / EDGE_ZONE);
+    } else if (distFromRight < EDGE_ZONE) {
+      edgeScrollDir = 1;
+      edgeScrollSpeed = EDGE_MAX_SPEED * (1 - Math.max(distFromRight, 0) / EDGE_ZONE);
+    } else {
+      edgeScrollDir = 0;
+    }
+
+    if (edgeScrollDir !== 0 && !edgeScrollRunning) {
+      edgeScrollRunning = true;
+      requestAnimationFrame(edgeScrollTick);
+    }
+  }
+
+  function edgeScrollTick() {
+    if (!reorderActive || edgeScrollDir === 0) {
+      edgeScrollRunning = false;
+      return;
+    }
+    pos += edgeScrollDir * edgeScrollSpeed;
+    rebase();
+    render();
+    updateDragTarget(lastPointerX, lastPointerY);
+    requestAnimationFrame(edgeScrollTick);
+  }
+
+  function centerOnImage(imgObj) {
+    const idx = imagesData.indexOf(imgObj);
+    if (idx === -1 || !centers.length) return;
+    pos = centers[idx] - innerWidthCurrent / 2;
+    velocity = 0;
+    snapping = false;
+    render();
+  }
+
+  function endReorderDrag() {
+    window.removeEventListener("pointermove", onReorderMove);
+    window.removeEventListener("pointerup", endReorderDrag);
+    window.removeEventListener("pointercancel", endReorderDrag);
+    document.body.style.userSelect = "";
+    document.body.style.cursor = "";
+
+    if (reorderActive) {
+      if (reorderGhost && reorderGhost.el) reorderGhost.el.remove();
+      unmarkAllSourceCopies(reorderSourceIdx);
+      if (reorderTargetEl) reorderTargetEl.style.transform = "";
+      // every step was already committed live during the drag - nothing left
+      // to swap here, just recenter on the dragged image's final resting spot
+      if (reorderSourceIdx !== null) centerOnImage(imagesData[reorderSourceIdx]);
+      reordering = false;
+    }
+
+    reorderSourceIdx = null;
+    reorderActive = false;
+    reorderGhost = null;
+    reorderTargetEl = null;
+    blockedIdx = null;
+    edgeScrollDir = 0;
+  }
+
+  // Defensive cleanup: forcibly tears down any in-progress reorder drag -
+  // dangling window listeners or a leftover ghost element - before anything
+  // rebuilds the track's DOM out from under it (double-click reset, upload).
+  function forceCancelReorderDrag() {
+    window.removeEventListener("pointermove", onReorderMove);
+    window.removeEventListener("pointerup", endReorderDrag);
+    window.removeEventListener("pointercancel", endReorderDrag);
+    document.body.style.userSelect = "";
+    document.body.style.cursor = "";
+    if (reorderGhost && reorderGhost.el) reorderGhost.el.remove();
+    unmarkAllSourceCopies(reorderSourceIdx);
+    if (reorderTargetEl) reorderTargetEl.style.transform = "";
+    reorderSourceIdx = null;
+    reorderActive = false;
+    reorderGhost = null;
+    reorderTargetEl = null;
+    blockedIdx = null;
+    reordering = false;
+    edgeScrollDir = 0;
+  }
+
+  function layout() {
+    computeBounds();
+    applyWidth(currentWidth);
+  }
+
+  window.addEventListener("resize", layout);
+
+  // --- control panel wiring ---
+  const frictionSlider = document.getElementById("frictionSlider");
+  const velocitySlider = document.getElementById("velocitySlider");
+  const imagesSlider = document.getElementById("imagesSlider");
+  const marginSlider = document.getElementById("marginSlider");
+  const frictionVal = document.getElementById("frictionVal");
+  const velocityVal = document.getElementById("velocityVal");
+  const imagesVal = document.getElementById("imagesVal");
+  const marginVal = document.getElementById("marginVal");
+
+  frictionSlider.value = friction;
+  velocitySlider.value = maxVelocity;
+  imagesSlider.value = maxVisible;
+  marginSlider.value = marginBoostPercent;
+  frictionVal.textContent = friction.toFixed(3);
+  velocityVal.textContent = maxVelocity;
+  imagesVal.textContent = maxVisible.toFixed(1);
+  marginVal.textContent = `+${marginBoostPercent}%`;
+
+  frictionSlider.addEventListener("input", (e) => {
+    friction = parseFloat(e.target.value);
+    frictionVal.textContent = friction.toFixed(3);
+  });
+
+  velocitySlider.addEventListener("input", (e) => {
+    maxVelocity = parseFloat(e.target.value);
+    velocityVal.textContent = maxVelocity;
+  });
+
+  imagesSlider.addEventListener("input", (e) => {
+    maxVisible = parseFloat(e.target.value);
+    imagesVal.textContent = maxVisible.toFixed(1);
+    layout();
+  });
+
+  marginSlider.addEventListener("input", (e) => {
+    marginBoostPercent = parseFloat(e.target.value);
+    marginVal.textContent = `+${marginBoostPercent}%`;
+    layout();
+  });
+
+  // --- image upload: drop zone / file picker ---
+  const dropzone = document.getElementById("dropzone");
+  const fileInput = document.getElementById("fileInput");
+  const dropzoneText = document.getElementById("dropzoneText");
+
+  function naturalCompare(a, b) {
+    return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+  }
+
+  function loadImageMeta(file) {
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => resolve({ src: url, aspect: img.naturalWidth / img.naturalHeight });
+      img.onerror = () => resolve(null);
+      img.src = url;
+    });
+  }
+
+  async function handleFiles(fileList) {
+    const files = Array.from(fileList).filter((f) => f.type.startsWith("image/"));
+    if (!files.length) return;
+
+    forceCancelReorderDrag();
+    files.sort((a, b) => naturalCompare(a.name, b.name));
+    dropzoneText.textContent = `Loading ${files.length} image${files.length > 1 ? "s" : ""}...`;
+
+    const loaded = (await Promise.all(files.map(loadImageMeta))).filter(Boolean);
+    if (!loaded.length) {
+      dropzoneText.innerHTML = `Couldn't read those files - try again<br><span class="dropzone-hint">Displayed in filename order</span>`;
+      return;
+    }
+
+    // release object URLs from a previous upload (placeholders aren't blob: URLs, so they're untouched)
+    imagesData.forEach((d) => { if (d.src.startsWith("blob:")) URL.revokeObjectURL(d.src); });
+
+    imagesData = loaded;
+    originalOrder = loaded.slice(); // fresh snapshot for double-click revert
+    dropzoneText.innerHTML = `${loaded.length} image${loaded.length > 1 ? "s" : ""} loaded, ordered by filename<br><span class="dropzone-hint">Drop more images to replace the set</span>`;
+
+    pos = 0;
+    velocity = 0;
+    snapping = false;
+    buildTrack();
+    renderThumbnails();
+    layout();
+  }
+
+  fileInput.addEventListener("change", (e) => handleFiles(e.target.files));
+  dropzone.addEventListener("click", () => fileInput.click());
+
+  ["dragenter", "dragover"].forEach((evt) => {
+    dropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      dropzone.classList.add("dragover");
+    });
+  });
+  ["dragleave", "drop"].forEach((evt) => {
+    dropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      dropzone.classList.remove("dragover");
+    });
+  });
+  dropzone.addEventListener("drop", (e) => handleFiles(e.dataTransfer.files));
+
+  // --- thumbnail strip: click-and-drag to reorder the slideshow sequence ---
+  const thumbstrip = document.getElementById("thumbstrip");
+  let dragIndex = null;
+
+  function renderThumbnails() {
+    thumbstrip.innerHTML = "";
+    imagesData.forEach((d, i) => {
+      const thumb = document.createElement("div");
+      thumb.className = "thumb";
+      thumb.draggable = true;
+
+      const img = document.createElement("img");
+      img.src = d.src;
+      img.alt = "";
+      img.draggable = false;
+      thumb.appendChild(img);
+
+      const num = document.createElement("span");
+      num.className = "thumb-num";
+      num.textContent = i + 1;
+      thumb.appendChild(num);
+
+      thumb.addEventListener("dragstart", () => {
+        dragIndex = i;
+        thumb.classList.add("dragging");
+      });
+      thumb.addEventListener("dragend", () => {
+        thumb.classList.remove("dragging");
+      });
+      thumb.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        thumb.classList.add("drag-over");
+      });
+      thumb.addEventListener("dragleave", () => {
+        thumb.classList.remove("drag-over");
+      });
+      thumb.addEventListener("drop", (e) => {
+        e.preventDefault();
+        thumb.classList.remove("drag-over");
+        if (dragIndex === null || dragIndex === i) return;
+
+        const moved = imagesData.splice(dragIndex, 1)[0];
+        imagesData.splice(i, 0, moved);
+        dragIndex = null;
+
+        renderThumbnails();
+        velocity = 0;
+        snapping = false;
+        buildTrack();
+        layout();
+        centerOnImage(moved);
+      });
+
+      thumbstrip.appendChild(thumb);
+    });
+  }
+
+  // --- double-click on the stage: revert to original (upload/filename) order ---
+  stage.addEventListener("dblclick", () => {
+    forceCancelReorderDrag();
+    if (!originalOrder.length) return;
+    imagesData = originalOrder.slice();
+    renderThumbnails();
+    pos = 0;
+    velocity = 0;
+    snapping = false;
+    buildTrack();
+    layout();
+  });
+
+  originalOrder = imagesData.slice(); // initial snapshot, before any reordering
+  buildTrack();
+  renderThumbnails();
+  layout();
+  window.addEventListener("load", layout);
+</script>
+
+</body>
+</html>
